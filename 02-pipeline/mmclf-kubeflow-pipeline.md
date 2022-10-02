@@ -54,6 +54,8 @@ mmclassification에서 따로 도커 이미지를 릴리즈 하고 있는 것 �
 4. `Produce metrics`: 3번에서 저장한 json 파일을 읽어 metric report에 적절한 형태로 가공하여 이를 별도 json 파일로 덤프한다.
     - UI단에서 metrics를 렌더링하기 위해서는 `MLPipeline Metrics` 라는 이름의 Output 아티팩트를 생성하면 된다.
     - 이를 위한 간단한 방법으로, `Lightweight python component`를 작성할 때 함수의 아규먼트에 metric json 출력 경로를 `OutputPath('Metrics)` 라는 타입 어노테이션으로 작성해주면 된다.
+    - 성공하면 아래와 같이 output에 metric이 렌더링 된다.
+        ![output](./img/mmclf-pipeline-output.png)
 
 ### Troubleshooting
 
