@@ -124,3 +124,33 @@ trialTemplate:
 처음에 Katib UI 상으로는 Trial이 계속 running 상태여서 잘 돌아가는 줄 알았는데 몇시간이 지나서도 안 도는 걸 보고 뭔가 이상하다 싶었다.
 역시나 원래 PyTorchJob 돌릴 때 발생했던 에러가 똑같이 발생한 것 같다.
 아직은 시간을 더 쏟아서 PyTorchJob을 살펴봐야겠지만.. 잘 돌아가기만 한다면 HPO 실험에 꽤 유용할 것 같다는 생각이 든다.
+
+
+***
+## Debugging PyTorchJob
+
+### Manual Trials
+* 우선 첫 step 으로 매뉴얼하게 두 프로세스를 각각 RANK을 설정해줘서 돌렸을 때 잘 되는지 확인해봤다. 아무 문제없이 잘 돌아간 것을 확인. 하나의 GPU을 공유했는데도 아무런 문제가 없었다.
+* `PytorchJob` 대신 Kubernetes `Job`을 이용해서 두개의 Pod를 따로 띄워서 확인. 처음에는 하나의 Pod에 여러개의 컨테이너를 띄워서 `localhost`를 `MASTER_ADDR`로 설정했다. 문제없는 것 확인. 그 다음에는 두개의 서로 다른 Pod를 띄웠는데, 이 때는 매뉴얼하게 master Pod의 IP 주소를 `MASTER_ADDR`로 설정하고 worker Pod를 띄웠음. 문제 없이 잘 돌아가는 것 확인.
+* Service를 master Pod에 연결 시켜서 한번에 두개의 Pod를 worker와 master로 띄워서 확인. 문제 없이 잘 돌아갔다.
+
+-> 위 디버깅 과정에서 일단 Pod 끼리 통신하는 것에 문제가 머신이나 Minikube 설정과는 관련이 없다는 것을 유추할 수 있었다.
+-> 따라서 남은 것은 Service와 연결되어 있는 `istio` 디버깅이었는데, 검색해보니 관련 내용을 비교적 쉽게 찾을 수 있었다.
+
+### Connection reset issue in `istio`
+> Related Github Issue: https://github.com/kubeflow/pytorch-operator/issues/258
+
+올라온지 좀 지난 이슈이긴 하지만, `PytorchJob` 사용 시 같은 현상을 겪고 있는 이슈를 발견했다.
+Worker에서 process group을 생성하려고 할 때 `Connection reset by peer` 에러로 실패하는 경우이다.
+결론은 istio-injection이 켜져 있는 경우에 (즉 istio sidecar Pod가 띄워지는 상황에) 이런 상황이 발생할 수 있다는 것이다.
+
+### istio-injection?
+istio-injection은 Pod를 띄울 때 각 Pod 마다 istio sidecar를 inject 하는 것을 의미한다.
+istio sidecar가 일종의 네트워크 proxy처럼 동작하면서 security나 observation 등 istio가 제공하는 기능들을 사용할 수 있다.
+istio-injection이 disable 된 상태에서는 어떤 Pod이든 간에 PyTorchJob Pod를 이름으로 접근 할 수 있다고 한다.
+단순히 Service의 기능을 하는 것이다.
+istio sidecar가 어떤 security 기능을 추가했는지는 아직 확인해보지 못했지만 이 경우 접근에 제약이 생기는 것은 분명한 것 같다.
+과거 Github Issue 들을 살펴봐도 istio 설정 관련 솔루션이 나와있는 것이 아니라 단순히 istio를 disable 시키는 것을 보면 단순한 문제는 아닌가보다(?)
+
+아래는 디버깅 후 돌려본 Katib job. 성공적으로 모든 trial들을 완료하고 best parameter를 찾을 수 있었다.
+![](img/experiments_success.png)
